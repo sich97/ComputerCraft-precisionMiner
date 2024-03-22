@@ -1,14 +1,107 @@
 bedrockID = 7
 diamondID = 56
+coalID = 263
 
 CubeSizeBuffer = 2
 
 globalLogger = {}
 
+-- TODO: Have a list of wanted items instead of just one target ID
+-- TODO: Does item ID's come as strings?
+
+function checkReturnFuel(logger)
+    -- Checks the movement logs to calculate required amount of fuel to return to origin
+    -- Returns true if current fuel level + fuel in inventory is 125% of the required amount, and false otherwise, triggering an immediate return to base before continuing
+
+    fuelInventoryCount = 0
+    for i=1,16 do
+        if turtle.getItemDetail(i).name == coalID then
+            fuelInventoryCount = fuelInventoryCount + turtle.getItemCount(i)
+    
+    totalFuel = fuelInventoryCount + turtle.getFuelLevel()
+
+    requiredAmountOfFuel = -- TODO: Amount of move actions since origin(?) Or maybe some other way of calculating actual direct distance instead of backtracking
+    requiredAmountOfFuel = requiredAmountOfFuel * 1.25
+
+    if totalFuel < 1.25 then
+        return false
+    else
+        return true
+    end
+
+function refuel()
+    turtle.select(1)
+    while turtle.getItemCount(1) > 0 then
+        fuelDifference = turtle.getFuelLimit() - turtle.getFuelLevel()
+        if fuelDifference > 0 then
+            turtle.refuel()
+
+function clearInventory(targetID)
+    for i=1,16 do
+        itemDetails = turtle.getItemDetail(i)
+        if itemDetails.name ~= targetID then
+            if itemDetails.name ~= coalID then
+                turtle.select(i)
+                turtle.drop()
+            end
+        end
+    
+    if turtle.getItemCount(1) > 0 then
+        if turtle.getItemDetail(1).name ~= coalID then
+            turtle.select(1)
+            for i=3,16 do
+                if turtle.getItemCount(i) == 0 then
+                    turtle.transferTo(i)
+                end
+            end
+        end
+    end
+
+    if turtle.getItemCount(2) > 0 then
+        if turtle.getItemDetail(2).name ~= targetID then
+            turtle.select(2)
+            for i=3,16 do
+                if turtle.getItemCount(i) == 0 then
+                    turtle.transferTo(i)
+                end
+            end
+        end
+    end
+
+    for i=3,16 do
+        if turtle.getItemDetail(i).name == coalID then
+            turtle.select(i)
+            spaceLeft = turtle.getItemSpace(1)
+            turtle.transferTo(1, spaceLeft)
+            extraCoalLeft = turtle.getItemCount(i)
+            for i=0,extraCoalLeft then
+                if turtle.getFuelLevel() < turtle.getFuelLimit() then
+                    turtle.refuel()
+                end
+            end
+            turtle.drop()
+        elseif turtle.getItemDetail(i).name == targetID then
+            turtle.select(i)
+            for b=2,16 do
+                if b ~= i then
+                    localSpaceLeft = turtle.getItemSpace(b)
+                    if turtle.getItemDetail().name == targetID then
+                        turtle.transferTo(b,localSpaceLeft)
+                    end
+                end
+            end
+        else
+            return false
+        end
+    end
+    return true
+end
+
 function move(logger, direction)
     -- TODO: Move the detection of and mining of diamonds/coal into this function (check all directions on every move) (passing a parameter for wheter or not already looking for diamonds or coal to avoid regression - remember to update all move calls afterwards)
     -- TODO: Add sand/gravel protection (the move function can assume the path is clear - and if it isn't then it should be sand/gravel)
     -- TODO: Add logging
+    -- TODO: Add check for fuel enough to return to origin
     if direction == "up" then
         turtle.up()
     elseif direction == "forward" then
@@ -142,6 +235,7 @@ function mineCube(targetID)
 end
 
 
+--[[
 function findBedrock(targetID)
     local hasFoundBedrock = false
     while hasFoundBedrock == false do
@@ -157,5 +251,43 @@ function findBedrock(targetID)
             move(globalLogger, "down")
         end
     end
-    -- TODO: Don't remember in the parent function to move up to the desirec y-level for strip mining
+    -- TODO: Don't remember in the parent function to move up to the desired y-level for strip mining
 end
+--]]
+
+function goToDesiredLevel(desiredLevel, currentLevel, targetID)
+    if desiredLevel<currentLevel then
+        local direction = "down"
+        local amountOfMoves = currentLevel - desiredLevel
+    elseif desiredLevel>currentLevel then
+        local direction = "up"
+        local amountOfMoves = desiredLevel - currentLevel
+    else
+        local amountOfMoves = 0
+    end
+
+    for i=0,amountOfMoves do
+        if direction == "down" then
+            if turtle.detectDown() then
+                if turtle.inspectDown() == bedrockID then
+                    return false
+                elseif turtle.inspectDown() == targetID then
+                    mineDiamonds()
+                    mine(globalLogger, direction)
+                    move(globalLogger, direction)
+                end
+            else
+                move(globalLogger, direction)
+            end
+        else:
+            if turtle.detectUp() then
+                if turtle.inspectUp() == bedrockID then
+                    return false
+                elseif turtle.inspectUp() == targetID then
+                    mineDiamonds()
+                    mine(globalLogger, direction)
+                    move(globalLogger, direction)
+                end
+            else
+                move(globalLogger, direction)
+            end
