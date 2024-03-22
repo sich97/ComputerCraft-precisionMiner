@@ -1,26 +1,107 @@
-bedrockID = 7
-diamondID = 56
-coalID = 263
+BedrockID = 7
+DiamondID = 56
+CoalID = 263
+BranchSpacing = 2
+
+-- If move and can't move then assume it is gravel/sand and dig with delay
 
 CubeSizeBuffer = 2
 
-globalLogger = {}
+GlobalLogger = {}
 
 -- TODO: Have a list of wanted items instead of just one target ID
 -- TODO: Does item ID's come as strings?
 
-function checkReturnFuel(logger)
-    -- Checks the movement logs to calculate required amount of fuel to return to origin
-    -- Returns true if current fuel level + fuel in inventory is 125% of the required amount, and false otherwise, triggering an immediate return to base before continuing
+function RTB(globalLog)
+    local rtbLog = {}
+    -- TODO: Return to base algorithm
 
-    fuelInventoryCount = 0
+    -- Returning rtbLog so that the miner can resume mining at location before RTB
+    return rtbLog
+end
+
+function RTM(rtbLog)
+    -- TODO: Replay log in reverse to return to location before RTB
+end
+
+function Replay(log, amountOfSteps, replayMove, replayTurn, replayMine, invert)
+end
+
+function StripMine(branchDirection, branchLengths, targetID)
+    for i=0,BranchSpacing do
+        Refuel()
+        if CheckReturnFuel() == true then
+            if turtle.inspect() == targetID then
+                MineCube(targetID)
+            end
+            if turtle.inspect() then
+                Mine(GlobalLogger, "forward")
+            end
+            turtle.Move(GlobalLogger, "forward")
+            turtle.Mine(GlobalLogger, "up")
+        else
+            local rtbLog = RTB(GlobalLogger)
+            RTM(rtbLog)
+        end
+    end
+    Turn(GlobalLogger, branchDirection)
+    MineBranch(logger, branchLengths)
+
+     -- Ensure correct post-conditions
+     Replay(GlobalLogger, 1, false, true, false, true)
+end
+
+function MineBranch(logger, branchLengths, targetID)
+    -- Mine branch
+    -- TODO: Add branch marker in global logger
+    for i=0,branchLengths do
+        Refuel()
+        if CheckReturnFuel(logger) == true then
+            if turtle.inspect() == targetID then
+                MineCube(targetID)
+            end
+            if turtle.inspect() then
+                Mine(logger, "forward")
+            end
+            turtle.Move(logger, "forward")
+            turtle.Mine(logger, "up")
+        else
+            local rtbLog = RTB(logger)
+            RTM(rtbLog)
+        end
+    end
+
+    -- Return to start of branch
+    turtle.turnRight()
+    turtle.turnRight()
+    local returnToStartOfBranchLog = {}
+    for i=0,branchLengths do
+        turtle.Move(returnToStartOfBranchLog, "forward")
+        -- TODO: Delete everything in global logger after and including the last branch marker
+    end
+
+    -- Ensure correct post-conditions
+    turtle.turnRight()
+    turtle.turnRight()
+end
+
+
+function CheckReturnFuel(logger)
+    -- Checks the Movement logs to calculate required amount of fuel to return to origin
+    -- returns true if current fuel level + fuel in inventory is 125% of the required amount, and false otherwise, triggering an immediate return to base before continuing
+
+    local fuelInventoryCount = 0
     for i=1,16 do
-        if turtle.getItemDetail(i).name == coalID then
+        if turtle.getItemDetail(i).name == CoalID then
             fuelInventoryCount = fuelInventoryCount + turtle.getItemCount(i)
+        end
+    end
     
-    totalFuel = fuelInventoryCount + turtle.getFuelLevel()
+    local totalFuel = fuelInventoryCount + turtle.getFuelLevel()
 
-    requiredAmountOfFuel = -- TODO: Amount of move actions since origin(?) Or maybe some other way of calculating actual direct distance instead of backtracking
+    local requiredAmountOfFuel = 4 -- 2 turns to face backwards and another 2 to turn around one at base
+    local amountOfMovesInLog = 0 -- TODO: Count the amount of moves in log
+    requiredAmountOfFuel = requiredAmountOfFuel + amountOfMovesInLog
     requiredAmountOfFuel = requiredAmountOfFuel * 1.25
 
     if totalFuel < 1.25 then
@@ -28,26 +109,31 @@ function checkReturnFuel(logger)
     else
         return true
     end
+end
 
-function refuel()
+function Refuel()
     turtle.select(1)
-    while turtle.getItemCount(1) > 0 then
-        fuelDifference = turtle.getFuelLimit() - turtle.getFuelLevel()
+    while turtle.getItemCount(1) > 0 do
+        local fuelDifference = turtle.getFuelLimit() - turtle.getFuelLevel()
         if fuelDifference > 0 then
-            turtle.refuel()
+            turtle.Refuel()
+        end
+    end
+end
 
-function clearInventory(targetID)
+function ClearInventory(targetID)
     for i=1,16 do
-        itemDetails = turtle.getItemDetail(i)
+        local itemDetails = turtle.getItemDetail(i)
         if itemDetails.name ~= targetID then
-            if itemDetails.name ~= coalID then
+            if itemDetails.name ~= CoalID then
                 turtle.select(i)
                 turtle.drop()
             end
         end
+    end
     
     if turtle.getItemCount(1) > 0 then
-        if turtle.getItemDetail(1).name ~= coalID then
+        if turtle.getItemDetail(1).name ~= CoalID then
             turtle.select(1)
             for i=3,16 do
                 if turtle.getItemCount(i) == 0 then
@@ -69,14 +155,14 @@ function clearInventory(targetID)
     end
 
     for i=3,16 do
-        if turtle.getItemDetail(i).name == coalID then
+        if turtle.getItemDetail(i).name == CoalID then
             turtle.select(i)
-            spaceLeft = turtle.getItemSpace(1)
+            local spaceLeft = turtle.getItemSpace(1)
             turtle.transferTo(1, spaceLeft)
-            extraCoalLeft = turtle.getItemCount(i)
-            for i=0,extraCoalLeft then
+            local extraCoalLeft = turtle.getItemCount(i)
+            for i=0,extraCoalLeft do
                 if turtle.getFuelLevel() < turtle.getFuelLimit() then
-                    turtle.refuel()
+                    turtle.Refuel()
                 end
             end
             turtle.drop()
@@ -84,9 +170,9 @@ function clearInventory(targetID)
             turtle.select(i)
             for b=2,16 do
                 if b ~= i then
-                    localSpaceLeft = turtle.getItemSpace(b)
+                    local spaceLeft = turtle.getItemSpace(b)
                     if turtle.getItemDetail().name == targetID then
-                        turtle.transferTo(b,localSpaceLeft)
+                        turtle.transferTo(b,spaceLeft)
                     end
                 end
             end
@@ -97,11 +183,10 @@ function clearInventory(targetID)
     return true
 end
 
-function move(logger, direction)
-    -- TODO: Move the detection of and mining of diamonds/coal into this function (check all directions on every move) (passing a parameter for wheter or not already looking for diamonds or coal to avoid regression - remember to update all move calls afterwards)
-    -- TODO: Add sand/gravel protection (the move function can assume the path is clear - and if it isn't then it should be sand/gravel)
+function Move(logger, direction)
+    -- TODO: Move the detection of and mining of diamonds/coal into this function (check for fuel first) (check all directions on every Move) (passing a parameter for wheter or not already looking for diamonds or coal to avoid regression - remember to update all Move calls afterwards)
+    -- TODO: Add sand/gravel protection (the Move function can assume the path is clear - and if it isn't then it should be sand/gravel - use turtle.dig() instead of Mine())
     -- TODO: Add logging
-    -- TODO: Add check for fuel enough to return to origin
     if direction == "up" then
         turtle.up()
     elseif direction == "forward" then
@@ -113,19 +198,17 @@ function move(logger, direction)
     end
 end
 
-function turn(logger, direction)
+function Turn(logger, direction)
     -- TODO: Add logging
     if direction == "right" then
-        turtle.turnRight()
+        turtle.TurnRight()
     elseif direction == "left" then
-        turtle.turnLeft()
+        turtle.TurnLeft()
     end
 end
 
-function mine(logger, direction)
+function Mine(logger, direction)
     -- TODO: Add logging
-    -- TODO: Add sand/gravel protection (by pausing a little bit after mining up or forward)
-    -- TODO: Handle refueling
     if direction == "forward" then
         turtle.dig()
     elseif direction == "up" then
@@ -135,19 +218,19 @@ function mine(logger, direction)
     end
 end
 
-function mineCircle(logger, radius, knownClearRadius, targetID)
+function MineCircle(logger, radius, knownClearRadius, targetID)
     local hasMinedTarget = false
 
     -- Go to the left-most boundry of the mining area
-    turn(localLogger, "left")
+    Turn(logger, "left")
     for i=0,knownClearRadius do
-        move(localLogger, "forward")
+        Move(logger, "forward")
     end
-    turn(localLogger, "right")
+    Turn(logger, "right")
     
     -- Go to the forward-most boundry of the mining area
     for i=0,knownClearRadius do
-        move(localLogger, "forward")
+        Move(logger, "forward")
     end
 
     -- Mine circle for each radius not yet clear
@@ -157,9 +240,9 @@ function mineCircle(logger, radius, knownClearRadius, targetID)
         if turtle.inspect() == targetID then
             hasMinedTarget = true
         end
-        mine(localLogger, "forward")
-        move(localLogger, "forward")
-        turn(localLogger, "right")
+        Mine(logger, "forward")
+        Move(logger, "forward")
+        Turn(logger, "right")
 
         -- Mine circle
         for i=0,3 do
@@ -167,8 +250,8 @@ function mineCircle(logger, radius, knownClearRadius, targetID)
                 if turtle.inspect() == targetID then
                     hasMinedTarget = true
                 end
-                mine(localLogger, "forward")
-                move(localLogger, "forward")
+                Mine(logger, "forward")
+                Move(logger, "forward")
             end
         end
     end
@@ -177,55 +260,56 @@ function mineCircle(logger, radius, knownClearRadius, targetID)
 end
 
 
-function expandCube(existingAreaRadius, localLogger, targetID)
+function ExpandCube(existingAreaRadius, logger, targetID)
     local hasMinedTarget = false
 
     -- Move to the top y-level of the existing box
     for i=0,existingAreaRadius do
-        move(localLogger, "up")
+        Move(logger, "up")
     end
 
-    -- Dig and move one extra y level up
+    -- Dig and Move one extra y level up
     if turtle.inspectUp() == targetID then
         hasMinedTarget = true
     end
-    mine(localLogger, "up")
-    move(localLogger, "up")
+    Mine(logger, "up")
+    Move(logger, "up")
 
     -- Mine circle at top y-level
-    hasMinedTarget = mineCircle(localLogger, existingAreaRadius+1, 0, targetID)
+    hasMinedTarget = MineCircle(logger, existingAreaRadius+1, 0, targetID)
 
     -- For every y-level except bottom
     for i=0,existingAreaRadius+1 do
-        move(localLogger, "down")
-        hasMinedTarget = mineCircle(localLogger, existingAreaRadius+1, existingAreaRadius, targetID)
+        Move(logger, "down")
+        hasMinedTarget = MineCircle(logger, existingAreaRadius+1, existingAreaRadius, targetID)
     end
 
-    -- Dig and move one extra y level down
+    -- Dig and Move one extra y level down
     if turtle.inspectUp() == targetID then
         hasMinedTarget = true
     end
-    mine(localLogger, "down")
-    move(localLogger, "down")
+    Mine(logger, "down")
+    Move(logger, "down")
 
     -- Mine circle at bottom y-level
-    hasMinedTarget = mineCircle(localLogger, existingAreaRadius+1, 0, targetID)
+    hasMinedTarget = MineCircle(logger, existingAreaRadius+1, 0, targetID)
 
 
     -- Move back to centre of cube
     for i=0,existingAreaRadius+1 do
-        move(localLogger, "up")
+        Move(logger, "up")
+    end
 
     return hasMinedTarget
 end
 
 
-function mineCube(targetID)
-    localLogger = {}
+function MineCube(targetID)
+    local localLogger = {}
     local expansionsWithoutHittingTarget = 0
     local totalExpansions = 0
     while expansionsWithoutHittingTarget<CubeSizeBuffer do
-        if expandCube(totalExpansions, localLogger, targetID) then
+        if ExpandCube(totalExpansions, localLogger, targetID) then
             expansionsWithoutHittingTarget = 0
         else
             expansionsWithoutHittingTarget = expansionsWithoutHittingTarget + 1
@@ -240,54 +324,57 @@ function findBedrock(targetID)
     local hasFoundBedrock = false
     while hasFoundBedrock == false do
         if turtle.detectDown() then
-            if turtle.inspectDown() == bedrockID then
+            if turtle.inspectDown() == BedrockID then
                 hasFoundBedrock = turtle
             elseif turtle.inspectDown() == targetID then
-                mineDiamonds()
-                mine(globalLogger, "down")
-                move(globalLogger, "down")
+                MineDiamonds()
+                Mine(GlobalLogger, "down")
+                Move(GlobalLogger, "down")
             end
         else
-            move(globalLogger, "down")
+            Move(GlobalLogger, "down")
         end
     end
-    -- TODO: Don't remember in the parent function to move up to the desired y-level for strip mining
+    -- TODO: Don't remember in the parent function to Move up to the desired y-level for strip mining
 end
 --]]
 
-function goToDesiredLevel(desiredLevel, currentLevel, targetID)
+function GoToDesiredLevel(desiredLevel, currentLevel, targetID)
+    local direction = "down"
+    local amountOfMoves = 0
     if desiredLevel<currentLevel then
-        local direction = "down"
-        local amountOfMoves = currentLevel - desiredLevel
+        direction = "down"
+        amountOfMoves = currentLevel - desiredLevel
     elseif desiredLevel>currentLevel then
-        local direction = "up"
-        local amountOfMoves = desiredLevel - currentLevel
-    else
-        local amountOfMoves = 0
+        direction = "up"
+        amountOfMoves = desiredLevel - currentLevel
     end
 
     for i=0,amountOfMoves do
         if direction == "down" then
             if turtle.detectDown() then
-                if turtle.inspectDown() == bedrockID then
+                if turtle.inspectDown() == BedrockID then
                     return false
                 elseif turtle.inspectDown() == targetID then
-                    mineDiamonds()
-                    mine(globalLogger, direction)
-                    move(globalLogger, direction)
+                    MineCube(targetID)
+                    Mine(GlobalLogger, direction)
+                    Move(GlobalLogger, direction)
                 end
             else
-                move(globalLogger, direction)
+                Move(GlobalLogger, direction)
             end
-        else:
+        else
             if turtle.detectUp() then
-                if turtle.inspectUp() == bedrockID then
+                if turtle.inspectUp() == BedrockID then
                     return false
                 elseif turtle.inspectUp() == targetID then
-                    mineDiamonds()
-                    mine(globalLogger, direction)
-                    move(globalLogger, direction)
+                    MineCube(targetID)
+                    Mine(GlobalLogger, direction)
+                    Move(GlobalLogger, direction)
                 end
             else
-                move(globalLogger, direction)
+                Move(GlobalLogger, direction)
             end
+        end
+    end
+end
