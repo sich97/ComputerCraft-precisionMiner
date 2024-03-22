@@ -14,20 +14,94 @@ GlobalLogger = {}
 
 function RTB(globalLog)
     local rtbLog = {}
-    -- TODO: Return to base algorithm
-
-    -- Returning rtbLog so that the miner can resume mining at location before RTB
-    return rtbLog
+    Turn(rtbLog, "right")
+    Turn(rtbLog, "right")
+    Replay(globalLog, Tablelength(globalLog), true, true, false, true, rtbLog)
+    Turn(rtbLog, "right")
+    Turn(rtbLog, "right")
+    -- TODO: Implement code for when arriving to base
+    local dumpLog = {}
+    Replay(rtbLog, Tablelength(rtbLog), true, true, false, true, dumpLog)
 end
 
-function RTM(rtbLog)
-    -- TODO: Replay log in reverse to return to location before RTB
+function Invert(direction)
+    if direction == "left" then
+        return "right"
+    elseif direction == "right" then
+        return "left"
+    end
+
+    if direction == "up" then
+        return "down"
+    elseif direction == "down" then
+        return "up"
+    end
+
+    if direction == "forward" then
+        return "back"
+    elseif direction == "back" then
+        return "forward"
+    end
 end
 
 function Replay(log, amountOfSteps, replayMove, replayTurn, replayMine, invert)
+    -- Generate replay
+    local storedAmountOfSteps = {}
+    for i = #log, 1, -1 do
+        if Tablelength(storedAmountOfSteps) >= amountOfSteps then
+            break
+        end
+        local shouldBeReplayed = false
+        if replayMove then
+            if log[i]["type"] == "move" then
+                shouldBeReplayed = true
+            end
+        end
+        if replayTurn then
+            if log[i]["type"] == "turn" then
+                shouldBeReplayed = true
+            end
+        end
+        if replayMine then
+            if log[i]["type"] == "mine" then
+                shouldBeReplayed = true
+            end
+        end
+
+        if shouldBeReplayed == true then
+            if invert then
+                local tmp = log[i]
+                local newTmp = {}
+                newTmp["type"] = tmp["type"]
+                -- Don't invert mine direction
+                if newTmp["type"] == "mine" then
+                    newTmp["direction"] = tmp["direction"]
+                end
+                -- But invert move and turn directions
+                else
+                    newTmp["direction"] = invert(tmp["direction"])
+                end
+                storedAmountOfSteps[Tablelength(storedAmountOfSteps) + 1] = newTmp
+            else
+                storedAmountOfSteps[Tablelength(storedAmountOfSteps) + 1] = log[i]
+            end
+        end
+    end
+
+    -- Execute replay
+    for i=0,Tablelength(storedAmountOfSteps) do
+        if storedAmountOfSteps[i]["type"] == "move" then
+            Move(replayLog, storedAmountOfSteps[i]["direction"])
+        elseif storedAmountOfSteps[i]["type"] == "turn" then
+            Turn(replayLog, storedAmountOfSteps[i]["direction"])
+        elseif storedAmountOfSteps[i]["type"] == "mine" then
+            -- TODO: Implement placing block if replayMine and invert is true
+        end
+    end
 end
 
 function StripMine(branchDirection, branchLengths, targetID)
+    -- Ensure branch spacing
     for i=0,BranchSpacing do
         Refuel()
         if CheckReturnFuel() == true then
@@ -40,20 +114,35 @@ function StripMine(branchDirection, branchLengths, targetID)
             turtle.Move(GlobalLogger, "forward")
             turtle.Mine(GlobalLogger, "up")
         else
-            local rtbLog = RTB(GlobalLogger)
-            RTM(rtbLog)
+            RTB(GlobalLogger)
         end
     end
-    Turn(GlobalLogger, branchDirection)
-    MineBranch(logger, branchLengths)
 
-     -- Ensure correct post-conditions
-     Replay(GlobalLogger, 1, false, true, false, true)
+    -- Turn to face new branch
+    Turn(GlobalLogger, branchDirection)
+
+    -- Mark new branch in log
+    local newEntry = {}
+    newEntry["type"] = "branch"
+    newEntry["direction"] = branchDirection
+    GlobalLogger[Tablelength(GlobalLogger) + 1] = newEntry
+
+    -- Mine branch
+    MineBranch(GlobalLogger, branchLengths)
+
+    -- Delete everything in global logger after and including the last branch marker
+    while GlobalLogger[-1]["type"] ~= "branch" do
+        table.remove(GlobalLogger, -1)
+    end
+    table.remove(GlobalLogger, -1)
+
+    -- Turn to continue mining main shaft
+    Replay(GlobalLogger, 2, false, true, false, true)
+    
 end
 
 function MineBranch(logger, branchLengths, targetID)
     -- Mine branch
-    -- TODO: Add branch marker in global logger
     for i=0,branchLengths do
         Refuel()
         if CheckReturnFuel(logger) == true then
@@ -66,8 +155,7 @@ function MineBranch(logger, branchLengths, targetID)
             turtle.Move(logger, "forward")
             turtle.Mine(logger, "up")
         else
-            local rtbLog = RTB(logger)
-            RTM(rtbLog)
+            RTB(logger)
         end
     end
 
@@ -77,7 +165,6 @@ function MineBranch(logger, branchLengths, targetID)
     local returnToStartOfBranchLog = {}
     for i=0,branchLengths do
         turtle.Move(returnToStartOfBranchLog, "forward")
-        -- TODO: Delete everything in global logger after and including the last branch marker
     end
 
     -- Ensure correct post-conditions
@@ -100,7 +187,7 @@ function CheckReturnFuel(logger)
     local totalFuel = fuelInventoryCount + turtle.getFuelLevel()
 
     local requiredAmountOfFuel = 4 -- 2 turns to face backwards and another 2 to turn around one at base
-    local amountOfMovesInLog = 0 -- TODO: Count the amount of moves in log
+    local amountOfMovesInLog = AmountOfMovesInLog(logger)
     requiredAmountOfFuel = requiredAmountOfFuel + amountOfMovesInLog
     requiredAmountOfFuel = requiredAmountOfFuel * 1.25
 
@@ -109,6 +196,18 @@ function CheckReturnFuel(logger)
     else
         return true
     end
+end
+
+function AmountOfMovesInLog(log)
+    local amountOfMoves = 0
+    for i=0,Tablelength(log) do
+        if log[i]["type"] == "move" then
+            amountOfMoves = amountOfMoves + 1
+        elseif log[i]["type"] == "turn" then
+            amountOfMoves = amountOfMoves + 1
+        end
+    end
+    return amountOfMoves
 end
 
 function Refuel()
@@ -183,10 +282,15 @@ function ClearInventory(targetID)
     return true
 end
 
+function Tablelength(table)
+    local count = 0
+    for _ in pairs(table) do count = count + 1 end
+    return count
+ end
+
 function Move(logger, direction)
     -- TODO: Move the detection of and mining of diamonds/coal into this function (check for fuel first) (check all directions on every Move) (passing a parameter for wheter or not already looking for diamonds or coal to avoid regression - remember to update all Move calls afterwards)
     -- TODO: Add sand/gravel protection (the Move function can assume the path is clear - and if it isn't then it should be sand/gravel - use turtle.dig() instead of Mine())
-    -- TODO: Add logging
     if direction == "up" then
         turtle.up()
     elseif direction == "forward" then
@@ -196,19 +300,29 @@ function Move(logger, direction)
     elseif direction == "down" then
         turtle.down()
     end
+
+    -- Log move
+    local newEntry = {}
+    newEntry["type"] = "move"
+    newEntry["direction"] = direction
+    logger[Tablelength(logger) + 1] = newEntry
 end
 
 function Turn(logger, direction)
-    -- TODO: Add logging
     if direction == "right" then
         turtle.TurnRight()
     elseif direction == "left" then
         turtle.TurnLeft()
     end
+
+    -- Log turn
+    local newEntry = {}
+    newEntry["type"] = "turn"
+    newEntry["direction"] = direction
+    logger[Tablelength(logger) + 1] = newEntry
 end
 
 function Mine(logger, direction)
-    -- TODO: Add logging
     if direction == "forward" then
         turtle.dig()
     elseif direction == "up" then
@@ -216,6 +330,12 @@ function Mine(logger, direction)
     elseif direction == "down" then
         turtle.digDown()
     end
+
+    -- Log mine
+    local newEntry = {}
+    newEntry["type"] = "mine"
+    newEntry["direction"] = direction
+    logger[Tablelength(logger) + 1] = newEntry
 end
 
 function MineCircle(logger, radius, knownClearRadius, targetID)
